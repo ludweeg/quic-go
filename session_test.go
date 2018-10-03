@@ -67,14 +67,15 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess          *session
-		sessionRunner *MockSessionRunner
-		scfg          *handshake.ServerConfig
-		mconn         *mockConnection
-		cryptoSetup   *mockCryptoSetup
-		streamManager *MockStreamManager
-		packer        *MockPacker
-		handshakeChan chan<- struct{}
+		sess                  *session
+		sessionRunner         *MockSessionRunner
+		scfg                  *handshake.ServerConfig
+		mconn                 *mockConnection
+		cryptoSetup           *mockCryptoSetup
+		streamManager         *MockStreamManager
+		packer                *MockPacker
+		handshakeChan         chan<- struct{}
+		handshakeCompleteChan chan<- struct{}
 	)
 
 	BeforeEach(func() {
@@ -93,9 +94,11 @@ var _ = Describe("Session", func() {
 			_ func(net.Addr, *Cookie) bool,
 			_ chan<- handshake.TransportParameters,
 			handshakeChanP chan<- struct{},
+			handshakeCompleteChanP chan<- struct{},
 			_ utils.Logger,
 		) (handshake.CryptoSetup, error) {
 			handshakeChan = handshakeChanP
+			handshakeCompleteChan = handshakeCompleteChanP
 			return cryptoSetup, nil
 		}
 
@@ -151,6 +154,7 @@ var _ = Describe("Session", func() {
 				_ []protocol.VersionNumber,
 				cookieFunc func(net.Addr, *Cookie) bool,
 				_ chan<- handshake.TransportParameters,
+				_ chan<- struct{},
 				_ chan<- struct{},
 				_ utils.Logger,
 			) (handshake.CryptoSetup, error) {
@@ -1229,7 +1233,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("calls the onHandshakeComplete callback when the handshake completes", func() {
-		close(handshakeChan)
+		close(handshakeCompleteChan)
 		sessionRunner.EXPECT().onHandshakeComplete(gomock.Any())
 		go func() {
 			defer GinkgoRecover()
@@ -1443,7 +1447,7 @@ var _ = Describe("Session", func() {
 				return &packedPacket{}, nil
 			})
 			sess.config.IdleTimeout = 0
-			close(handshakeChan)
+			close(handshakeCompleteChan)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1552,11 +1556,11 @@ var _ = Describe("Session", func() {
 
 var _ = Describe("Client Session", func() {
 	var (
-		sess          *session
-		sessionRunner *MockSessionRunner
-		packer        *MockPacker
-		mconn         *mockConnection
-		handshakeChan chan<- struct{}
+		sess                  *session
+		sessionRunner         *MockSessionRunner
+		packer                *MockPacker
+		mconn                 *mockConnection
+		handshakeCompleteChan chan<- struct{}
 
 		cryptoSetup *mockCryptoSetup
 	)
@@ -1572,12 +1576,13 @@ var _ = Describe("Client Session", func() {
 			_ *tls.Config,
 			_ *handshake.TransportParameters,
 			_ chan<- handshake.TransportParameters,
-			handshakeChanP chan<- struct{},
+			_ chan<- struct{},
+			handshakeCompleteChanP chan<- struct{},
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 			_ utils.Logger,
 		) (handshake.CryptoSetup, error) {
-			handshakeChan = handshakeChanP
+			handshakeCompleteChan = handshakeCompleteChanP
 			return cryptoSetup, nil
 		}
 
@@ -1615,7 +1620,7 @@ var _ = Describe("Client Session", func() {
 			}),
 			packer.EXPECT().PackPacket().AnyTimes(),
 		)
-		close(handshakeChan)
+		close(handshakeCompleteChan)
 		go func() {
 			defer GinkgoRecover()
 			sess.run()
